@@ -211,3 +211,67 @@ contract L1BlockCustomGasToken_Test is L1BlockTest {
         l1Block.setGasPayingToken(address(this), 18, "Test", "TST");
     }
 }
+
+contract L1BlockGetL1DataCost_Test is L1BlockTest {
+    function test_getL1DataCost_minimumBounds() external {
+        // This test is a port from a similar Go implementation.
+        // https://github.com/ethereum-optimism/op-geth/blob/6c1047a2d9db86d03f635bb24704b77675189227/core/types/rollup_cost_test.go#L62
+        vm.prank(depositor);
+        bytes memory functionCallDataPacked = Encoding.encodeSetL1BlockValuesEcotone(
+            uint32(2), // _baseFeeScalar
+            uint32(3), // _blobBaseFeeScalar
+            uint64(0), // _sequenceNumber
+            uint64(0), // _timestamp
+            uint64(0), // _number
+            uint256(1000 * 1e6), // _baseFee
+            uint256(10 * 1e6), // _blobBaseFee
+            bytes32(0), // _hash
+            bytes32(0) // _batcherHash
+        );
+        (bool success,) = address(l1Block).call(functionCallDataPacked);
+        assertTrue(success, "Function call failed");
+
+        uint256 fjordFee = 3203000; // 100_000_000 * (2 * 1000 * 1e6 * 16 + 3 * 10 * 1e6) / 1e12
+
+        // Minimum size transactions:
+        // -42.5856 + 0.8365*110 = 49.4294
+        // -42.5856 + 0.8365*150 = 82.8894
+        // -42.5856 + 0.8365*170 = 99.6194
+        uint256[3] memory fastLzSizes = [uint256(100), uint256(150), uint256(170)];
+        for (uint256 i = 0; i < fastLzSizes.length; i++) {
+            uint256 got = l1Block.getL1DataCost(abi.encode(fastLzSizes[i]));
+            assertEq(got, fjordFee);
+        }
+
+        // Larger size transactions:
+        // -42.5856 + 0.8365*171 = 100.4559
+        // -42.5856 + 0.8365*175 = 108.8019
+        // -42.5856 + 0.8365*200 = 124.7144
+        fastLzSizes = [uint256(171), uint256(175), uint256(200)];
+        for (uint256 i = 0; i < fastLzSizes.length; i++) {
+            uint256 got = l1Block.getL1DataCost(abi.encode(fastLzSizes[i]));
+            assertGt(got, fjordFee);
+        }
+    }
+
+    function test_getL1DataCost_solidityParity() external {
+        // This test is a port from a similar Go implementation.
+        // https://github.com/ethereum-optimism/op-geth/blob/6c1047a2d9db86d03f635bb24704b77675189227/core/types/rollup_cost_test.go#L99
+        vm.prank(depositor);
+        bytes memory functionCallDataPacked = Encoding.encodeSetL1BlockValuesEcotone(
+            uint32(20), // _baseFeeScalar
+            uint32(15), // _blobBaseFeeScalar
+            uint64(0), // _sequenceNumber
+            uint64(0), // _timestamp
+            uint64(0), // _number
+            uint256(2 * 1e6), // _baseFee
+            uint256(3 * 1e6), // _blobBaseFee
+            bytes32(0), // _hash
+            bytes32(0) // _batcherHash
+        );
+        (bool success,) = address(l1Block).call(functionCallDataPacked);
+        assertTrue(success, "Function call failed");
+        uint256 got = l1Block.getL1DataCost(abi.encode(uint256(235)));
+        assertEq(got, 105484);
+    }
+}

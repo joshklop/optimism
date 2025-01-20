@@ -15,6 +15,7 @@ interface IL1Block {
     function gasPayingToken() external view returns (address addr_, uint8 decimals_);
     function gasPayingTokenName() external view returns (string memory name_);
     function gasPayingTokenSymbol() external view returns (string memory symbol_);
+    function getL1DataCost(bytes calldata cd) external view returns (uint256);
     function hash() external view returns (bytes32);
     function isCustomGasToken() external view returns (bool);
     function l1FeeOverhead() external view returns (uint256);

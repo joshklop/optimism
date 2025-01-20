@@ -60,6 +60,12 @@ contract L1Block is ISemver, IGasToken {
     /// @notice The latest L1 blob base fee.
     uint256 public blobBaseFee;
 
+    // todo docs
+    // todo should types be smaller? not sure about evm optimizations
+    uint256 public constant FJORD_MIN_TRANSACTION_SIZE_SCALED = 100*1e6;
+    uint256 public constant FJORD_POSITIVE_INTERCEPT = 42_585_600;
+    uint256 public constant FJORD_FAST_LZ_COEF = 836_500;
+
     /// @custom:semver 1.5.1-beta.5
     function version() public pure virtual returns (string memory) {
         return "1.5.1-beta.5";
@@ -180,5 +186,21 @@ contract L1Block is ISemver, IGasToken {
         GasPayingToken.set({ _token: _token, _decimals: _decimals, _name: _name, _symbol: _symbol });
 
         emit GasPayingTokenSet({ token: _token, decimals: _decimals, name: _name, symbol: _symbol });
+    }
+
+    function getL1DataCost(bytes calldata cd) external view returns (uint256) {
+        // Fjord L1 cost function:
+		//l1FeeScaled = baseFeeScalar*l1BaseFee*16 + blobFeeScalar*l1BlobBaseFee
+		//estimatedSize = max(minTransactionSize, intercept + fastlzCoef*fastlzSize)
+		//l1Cost = estimatedSize * l1FeeScaled / 1e12
+
+		uint256 fastlzSize = abi.decode(cd, (uint256));
+
+		uint256 l1FeeScaled = baseFeeScalar*basefee*16 + blobBaseFeeScalar*blobBaseFee;
+		uint256 estimatedSize = FJORD_FAST_LZ_COEF * fastlzSize - FJORD_POSITIVE_INTERCEPT;
+		if (estimatedSize < FJORD_MIN_TRANSACTION_SIZE_SCALED) {
+		  estimatedSize = FJORD_MIN_TRANSACTION_SIZE_SCALED;
+		}
+		return estimatedSize * l1FeeScaled / 1e12;
     }
 }
